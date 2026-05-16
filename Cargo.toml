@@ -1,0 +1,12 @@
+[package]
+name = "kisd"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+anyhow = "1.0.102"
+nom = "8.0.0"
+nusb = { version = "0.2.3", features = ["tokio"] }
+tokio = { version = "1.52.3", features = ["io-util", "macros", "rt", "time"] }
+zerocopy = "0.8.48"
+zerocopy-derive = "0.8.48"
