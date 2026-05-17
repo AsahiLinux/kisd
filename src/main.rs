@@ -134,7 +134,7 @@ impl DebugUsb {
     }
 
     async fn req(&mut self, ep_id: u8, msg: Bytes) -> anyhow::Result<Bytes> {
-        println!("out: {:x}", msg);
+        //println!("out: {:x}", msg);
         self.tx(ep_id, msg).await?;
         tokio::time::timeout(Duration::from_millis(250),self.rx(ep_id)).await?
     }
@@ -212,7 +212,7 @@ impl DebugUsb {
                         buf.freeze()
                     };
                     let res = dbgusb.req(pam_ep, cmd).await.map_err(std::io::Error::other)?;
-                    println!("in:  {:x}", res);
+                    //println!("in:  {:x}", res);
                 }
 
                 let padding_bytes = (4 - (msg.len() % 4)) % 4;
@@ -242,7 +242,7 @@ impl DebugUsb {
                     buf.freeze()
                 };
                 let res = dbgusb.req(pam_ep, cmd).await.map_err(std::io::Error::other)?;
-                println!("in:  {:x}", res);
+                //println!("in:  {:x}", res);
             }
             Ok::<_, std::io::Error>(dbgusb)
         });
