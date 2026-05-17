@@ -5,8 +5,11 @@ edition = "2024"
 
 [dependencies]
 anyhow = "1.0.102"
-nom = "8.0.0"
+bytes = "1.11.1"
+futures-util = { version = "0.3.32", features = ["sink"] }
+nix = { version = "0.31.3", features = ["fs", "term"] }
 nusb = { version = "0.2.3", features = ["tokio"] }
-tokio = { version = "1.52.3", features = ["io-util", "macros", "rt", "time"] }
+tokio = { version = "1.52.3", features = ["fs", "io-util", "macros", "net", "rt", "time"] }
+tokio-util = { version = "0.7.18", features = ["io"] }
 zerocopy = "0.8.48"
 zerocopy-derive = "0.8.48"
