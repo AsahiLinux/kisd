@@ -269,6 +269,7 @@ async fn main() -> anyhow::Result<()> {
     let mut pty = pty::Pty::new()?;
     println!("{}", pty.name());
 
+    tokio::fs::remove_file(&"/dev/m1n1").await?;
     tokio::fs::symlink(pty.name(), &"/dev/m1n1").await?;
 
     loop {
