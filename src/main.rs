@@ -90,13 +90,14 @@ impl KisPortal {
         match (device_version, self) {
             (_, KisPortal::Config) => Some(1),
 
-            // bcdDevice 1.20: M1 Pro
+            // bcdDevice 1.20: M1, M1 Pro
             (0x120, KisPortal::PAM) => Some(1),
             (0x120, KisPortal::PPM) => Some(2),
 
+            // bcdDevice 2.00: M2
             // bcdDevice 4.00: M4, A18 Pro
-            (0x400, KisPortal::PAM) => Some(3),
-            (0x400, KisPortal::PPM) => Some(4),
+            (0x200|0x400, KisPortal::PAM) => Some(3),
+            (0x200|0x400, KisPortal::PPM) => Some(4),
             _ => None,
         }
     }
