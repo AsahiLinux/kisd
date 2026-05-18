@@ -111,7 +111,7 @@ struct DebugUsb {
 }
 
 impl DebugUsb {
-    async fn open(base: u64) -> anyhow::Result<Self> {
+    async fn open(base: Option<u64>) -> anyhow::Result<Self> {
         let device = list_devices()
             .await
             .context("list devices")?
@@ -125,13 +125,19 @@ impl DebugUsb {
             .context("set configuration")?;
         let interface = device.claim_interface(0).await.context("claim interface")?;
 
-        Ok(Self {
+        let mut dbgusb = Self {
             interface,
-            base,
+            base: base.unwrap_or(0),
             device_version: device.device_descriptor().device_version(),
             rx: Default::default(),
             tx: Default::default(),
-        })
+        };
+
+        if base.is_none() {
+            dbgusb.guess_base().await?;
+        }
+
+        Ok(dbgusb)
     }
 
     async fn get_rx(
@@ -171,6 +177,42 @@ impl DebugUsb {
         //println!("out: {:x}", msg);
         self.tx(ep_id, msg).await?;
         tokio::time::timeout(Duration::from_millis(250), self.rx(ep_id)).await?
+    }
+
+    async fn guess_base(&mut self) -> anyhow::Result<()> {
+        let cfg_ep = KisPortal::Config.endpoint_id(self.device_version).unwrap();
+        let mut buf = BytesMut::new();
+        buf.extend_from_slice(
+            KisHeader {
+                sequence: 0x0080,
+                version: 0xa0,
+                portal: 0,
+                command: KisCommand::PAR as u8,
+                indexLo: 0x01,
+                indexHiRplSizeLo: 0x00,
+                rplSizeHi: 0,
+                reqSize: 0xc,
+            }
+            .as_bytes(),
+        );
+        buf.extend_from_slice(
+            PaArgs {
+                addr: 0,
+                length: 80,
+            }
+            .as_bytes(),
+        );
+        let mut descriptor = self.req(cfg_ep, buf.freeze()).await?;
+
+        drop(descriptor.split_to(32));
+        let mut base = descriptor.get_u64_le() & !0xffffff;
+
+        if self.device_version >= 0x400 {
+            base -= 0x1000000;
+        }
+
+        self.base = base;
+        Ok(())
     }
 
     async fn enable_portals(
@@ -373,7 +415,7 @@ async fn debugusb_loop(args: &Args, pty: &mut pty::Pty) -> anyhow::Result<()> {
 #[command(version, about, long_about = None)]
 struct Args {
     #[arg(short, long, value_parser=maybe_hex::<u64>)]
-    base: u64,
+    base: Option<u64>,
 }
 
 #[tokio::main(flavor = "current_thread")]
