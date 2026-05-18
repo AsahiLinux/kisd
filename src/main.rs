@@ -225,7 +225,9 @@ impl DebugUsb {
             base &= !0x1000000;
         }
 
+        log::info!("Guessed base = 0x{:x}", base);
         self.base = base;
+
         Ok(())
     }
 
@@ -425,7 +427,7 @@ async fn main() -> Result<(), DebugUsbError> {
         match debugusb_loop(&args, &mut pty).await {
             Err(DebugUsbError::DeviceNotFound) => {}
             Err(e) => {
-                log::error!("Disconnected: {:?}", e);
+                log::error!("Disconnected: {}", e);
                 log::info!("Waiting for device");
             }
             Ok(()) => {
