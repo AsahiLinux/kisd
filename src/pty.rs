@@ -9,15 +9,13 @@ use std::task::ready;
 use nix::fcntl::{OFlag, open};
 use nix::pty::{PtyMaster, grantpt, posix_openpt, ptsname, unlockpt};
 use nix::sys::stat::Mode;
-use nix::sys::termios::{LocalFlags, tcgetattr, tcsetattr};
-use nix::unistd::close;
 use tokio::io::unix::AsyncFd;
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 
 pub struct Pty {
     name: String,
     inner: Option<AsyncFd<PtyMaster>>,
-    keep_alive: OwnedFd,
+    _keep_alive: OwnedFd,
 }
 
 impl Pty {
@@ -43,7 +41,7 @@ impl Pty {
         Ok(Self {
             name: pty_name,
             inner: Some(AsyncFd::new(fd)?),
-            keep_alive: client,
+            _keep_alive: client,
         })
     }
 
@@ -91,7 +89,7 @@ impl AsyncWrite for Pty {
         }
     }
 
-    fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+    fn poll_flush(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<io::Result<()>> {
         Poll::Ready(Ok(()))
     }
 

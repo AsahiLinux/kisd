@@ -22,10 +22,10 @@ struct KisHeader {
     version: u8,
     portal: u8,
     command: u8,
-    indexLo: u8,
-    indexHiRplSizeLo: u8,
-    rplSizeHi: u8,
-    reqSize: u32,
+    offset1: u8,
+    offset2: u8,
+    offset3: u8,
+    args_len: u32,
 }
 
 #[repr(C, packed)]
@@ -72,17 +72,17 @@ async fn endpoint_rx(
 enum KisPortal {
     Config = 0x01,
     //RSM = 0x10,
-    PAM = 0x11,
-    PPM = 0x13,
+    Pam = 0x11,
+    Ppm = 0x13,
 }
 
 #[repr(u8)]
 enum KisCommand {
-    PCR = 0,
-    PCW = 1,
-    PAR = 2,
-    PAW = 3,
-    PSWD = 5,
+    //Pcr = 0,
+    Pcw = 1,
+    Par = 2,
+    Paw = 3,
+    //Pswd = 5,
 }
 
 impl KisPortal {
@@ -91,13 +91,13 @@ impl KisPortal {
             (_, KisPortal::Config) => Some(1),
 
             // bcdDevice 1.20: M1, M1 Pro
-            (0x120, KisPortal::PAM) => Some(1),
-            (0x120, KisPortal::PPM) => Some(2),
+            (0x120, KisPortal::Pam) => Some(1),
+            (0x120, KisPortal::Ppm) => Some(2),
 
             // bcdDevice 2.00: M2
             // bcdDevice 4.00: M4, A18 Pro
-            (0x200|0x400, KisPortal::PAM) => Some(3),
-            (0x200|0x400, KisPortal::PPM) => Some(4),
+            (0x200 | 0x400, KisPortal::Pam) => Some(3),
+            (0x200 | 0x400, KisPortal::Ppm) => Some(4),
             _ => None,
         }
     }
@@ -175,9 +175,11 @@ impl DebugUsb {
     }
 
     async fn req(&mut self, ep_id: u8, msg: Bytes) -> anyhow::Result<Bytes> {
-        //println!("out: {:x}", msg);
+        tracing::trace!("out[{}]: {:x}", ep_id, msg);
         self.tx(ep_id, msg).await?;
-        tokio::time::timeout(Duration::from_millis(250), self.rx(ep_id)).await?
+        let res = tokio::time::timeout(Duration::from_millis(250), self.rx(ep_id)).await??;
+        tracing::trace!("in[{}]:  {:x}", ep_id, res);
+        Ok(res)
     }
 
     async fn guess_base(&mut self) -> anyhow::Result<()> {
@@ -188,11 +190,11 @@ impl DebugUsb {
                 sequence: 0x0080,
                 version: 0xa0,
                 portal: 0,
-                command: KisCommand::PAR as u8,
-                indexLo: 0x01,
-                indexHiRplSizeLo: 0x00,
-                rplSizeHi: 0,
-                reqSize: 0xc,
+                command: KisCommand::Par as u8,
+                offset1: 0x01,
+                offset2: 0x00,
+                offset3: 0,
+                args_len: 0xc,
             }
             .as_bytes(),
         );
@@ -209,7 +211,7 @@ impl DebugUsb {
         let mut base = descriptor.get_u64_le() & !0xffffff;
 
         if self.device_version >= 0x400 {
-            base -= 0x1000000;
+            base &= !0x1000000;
         }
 
         self.base = base;
@@ -218,7 +220,6 @@ impl DebugUsb {
 
     async fn enable_portals(
         &mut self,
-        portals: impl IntoIterator<Item = KisPortal>,
     ) -> anyhow::Result<()> {
         let cfg_ep = KisPortal::Config.endpoint_id(self.device_version).unwrap();
         let mut buf = BytesMut::new();
@@ -227,11 +228,11 @@ impl DebugUsb {
                 sequence: 0xff02,
                 version: 0xa0,
                 portal: KisPortal::Config as u8,
-                command: KisCommand::PCW as u8,
-                indexLo: 0x16,
-                indexHiRplSizeLo: 0x04,
-                rplSizeHi: 0,
-                reqSize: 4,
+                command: KisCommand::Pcw as u8,
+                offset1: 0x16,
+                offset2: 0x04,
+                offset3: 0,
+                args_len: 4,
             }
             .as_bytes(),
         );
@@ -241,11 +242,11 @@ impl DebugUsb {
     }
 
     async fn uart_rx(&mut self) -> anyhow::Result<impl AsyncRead + Send + 'static> {
-        self.enable_portals([]).await?;
-        let pam_ep = KisPortal::PAM
+        self.enable_portals().await?;
+        let pam_ep = KisPortal::Pam
             .endpoint_id(self.device_version)
             .ok_or(anyhow::anyhow!(
-                "Do not know PAM portal endpoint for device version {:x}",
+                "Do not know Pam portal endpoint for device version {:x}",
                 self.device_version
             ))?;
         let mut buf = BytesMut::new();
@@ -253,31 +254,31 @@ impl DebugUsb {
             KisHeader {
                 sequence: 0x1300,
                 version: 0xa0,
-                portal: KisPortal::PPM as u8,
-                command: KisCommand::PCW as u8,
-                indexLo: 0x03,
-                indexHiRplSizeLo: 0x04,
-                rplSizeHi: 0,
-                reqSize: 4,
+                portal: KisPortal::Ppm as u8,
+                command: KisCommand::Pcw as u8,
+                offset1: 0x03,
+                offset2: 0x04,
+                offset3: 0,
+                args_len: 4,
             }
             .as_bytes(),
         );
         buf.put_u32_le(1);
         self.req(pam_ep, buf.freeze()).await?;
 
-        let ppm_ep = KisPortal::PPM
+        let ppm_ep = KisPortal::Ppm
             .endpoint_id(self.device_version)
             .ok_or(anyhow::anyhow!(
-                "Do not know PPM portal endpoint for device version {:x}",
+                "Do not know Ppm portal endpoint for device version {:x}",
                 self.device_version
             ))?;
         let uart_rx = endpoint_rx(&self.interface, ppm_ep).await?;
 
-        let stream = uart_rx.try_filter_map(|mut retbuf| {
+        let stream = uart_rx.try_filter_map(move |mut retbuf| {
             let hdr_bytes = retbuf.split_to(std::mem::size_of::<KisHeader>());
             let hdr = KisHeader::ref_from_bytes(&hdr_bytes).unwrap();
 
-            if hdr.portal == KisPortal::PPM as u8 {
+            if hdr.portal == KisPortal::Ppm as u8 {
                 let words = retbuf.get_u32_le() as usize;
                 let mut content = retbuf.split_to(words * 4);
                 let bytes = retbuf.get_u32_le() as usize;
@@ -287,7 +288,7 @@ impl DebugUsb {
 
                 futures_util::future::ready(Ok(Some(content)))
             } else {
-                println!("in: {:#x?}", hdr);
+                tracing::trace!("in[{}]:  {:#x?}", ppm_ep, hdr);
                 futures_util::future::ready(Ok(None))
             }
         });
@@ -296,10 +297,10 @@ impl DebugUsb {
     }
 
     async fn uart_tx(self) -> anyhow::Result<impl AsyncWrite + Send + 'static> {
-        let pam_ep = KisPortal::PAM
+        let pam_ep = KisPortal::Pam
             .endpoint_id(self.device_version)
             .ok_or(anyhow::anyhow!(
-                "Do not know PAM portal endpoint for device version {:x}",
+                "Do not know Pam portal endpoint for device version {:x}",
                 self.device_version
             ))?;
 
@@ -309,53 +310,33 @@ impl DebugUsb {
                 if msg.is_empty() {
                     continue;
                 }
-                for (hdr, args) in [
-                    (
-                        KisHeader {
-                            sequence: 0x1100,
-                            version: 0xa0,
-                            portal: KisPortal::PAM as u8,
-                            command: KisCommand::PAR as u8,
-                            indexLo: 0,
-                            indexHiRplSizeLo: 0,
-                            rplSizeHi: 0,
-                            reqSize: 0xc,
-                        },
-                        PaArgs {
-                            addr: dbgusb.base + 0x13402c,
-                            length: 0x04,
-                        },
-                    ),
-                    (
+                let cmd = {
+                    let mut buf = BytesMut::new();
+                    buf.extend_from_slice(
                         KisHeader {
                             sequence: 0x1155,
                             version: 0xa0,
-                            portal: KisPortal::PAM as u8,
-                            command: KisCommand::PAR as u8,
-                            indexLo: 0,
-                            indexHiRplSizeLo: 0,
-                            rplSizeHi: 0,
-                            reqSize: 0xc,
-                        },
-                        PaArgs {
-                            addr: dbgusb.base + 0x134014,
-                            length: 0x04,
-                        },
-                    ),
-                ] {
-                    let cmd = {
-                        let mut buf = BytesMut::new();
-                        buf.extend_from_slice(hdr.as_bytes());
-                        buf.extend_from_slice(args.as_bytes());
+                            portal: KisPortal::Pam as u8,
+                            command: KisCommand::Par as u8,
+                            offset1: 0,
+                            offset2: 0,
+                            offset3: 0,
+                            args_len: 0xc,
+                        }
+                        .as_bytes());
+                        buf.extend_from_slice(
+                            PaArgs {
+                                addr: dbgusb.base + 0x134014,
+                                length: 0x04,
+                            }
+                            .as_bytes());
 
-                        buf.freeze()
-                    };
-                    let res = dbgusb
-                        .req(pam_ep, cmd)
-                        .await
-                        .map_err(std::io::Error::other)?;
-                    //println!("in:  {:x}", res);
-                }
+                    buf.freeze()
+                };
+                dbgusb
+                    .req(pam_ep, cmd)
+                    .await
+                    .map_err(std::io::Error::other)?;
 
                 let padding_bytes = (4 - (msg.len() % 4)) % 4;
                 let cmd = {
@@ -365,12 +346,12 @@ impl DebugUsb {
                         KisHeader {
                             sequence: 0x1160,
                             version: 0xa0,
-                            portal: KisPortal::PAM as u8,
-                            command: KisCommand::PAW as u8,
-                            indexLo: 0,
-                            indexHiRplSizeLo: 0,
-                            rplSizeHi: 0,
-                            reqSize: (12 + msg.len() + padding_bytes) as u32,
+                            portal: KisPortal::Pam as u8,
+                            command: KisCommand::Paw as u8,
+                            offset1: 0,
+                            offset2: 0,
+                            offset3: 0,
+                            args_len: (12 + msg.len() + padding_bytes) as u32,
                         }
                         .as_bytes(),
                     );
@@ -388,7 +369,7 @@ impl DebugUsb {
 
                     buf.freeze()
                 };
-                let res = dbgusb
+                dbgusb
                     .req(pam_ep, cmd)
                     .await
                     .map_err(std::io::Error::other)?;
@@ -421,6 +402,7 @@ struct Args {
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> anyhow::Result<()> {
+    env_logger::init();
     let args = Args::parse();
 
     let mut pty = pty::Pty::new()?;
