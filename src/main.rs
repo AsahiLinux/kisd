@@ -1,6 +1,5 @@
 mod pty;
 
-use anyhow::Context;
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 use clap::Parser;
 use clap_num::maybe_hex;
@@ -38,7 +37,7 @@ struct PaArgs {
 async fn endpoint_tx(
     interface: &nusb::Interface,
     ep_id: u8,
-) -> anyhow::Result<impl Sink<Bytes, Error = std::io::Error> + Send + 'static> {
+) -> Result<impl Sink<Bytes, Error = std::io::Error> + Send + 'static, nusb::Error> {
     let ep = interface.endpoint::<Bulk, Out>(ep_id)?;
     let writer = ep.writer(16384);
     Ok(futures_util::sink::unfold(
@@ -54,7 +53,7 @@ async fn endpoint_tx(
 async fn endpoint_rx(
     interface: &nusb::Interface,
     ep_id: u8,
-) -> anyhow::Result<impl Stream<Item = std::io::Result<Bytes>> + Send + 'static> {
+) -> Result<impl Stream<Item = std::io::Result<Bytes>> + Send + 'static, nusb::Error> {
     let ep = interface.endpoint::<Bulk, In>(ep_id | 0x80)?;
     Ok(futures_util::stream::try_unfold(ep, |mut ep| async move {
         while ep.pending() < 8 {
@@ -69,6 +68,7 @@ async fn endpoint_rx(
 }
 
 #[repr(u8)]
+#[derive(Debug)]
 enum KisPortal {
     Config = 0x01,
     //RSM = 0x10,
@@ -111,20 +111,30 @@ struct DebugUsb {
     tx: HashMap<u8, Pin<Box<dyn Sink<Bytes, Error = std::io::Error> + Send>>>,
 }
 
-impl DebugUsb {
-    async fn open(base: Option<u64>) -> anyhow::Result<Self> {
-        let device = list_devices()
-            .await
-            .context("list devices")?
-            .find(|dev| dev.vendor_id() == 0x05ac && dev.product_id() == 0x1881)
-            .ok_or(anyhow::anyhow!("device not found"))?;
+#[derive(Debug, thiserror::Error)]
+enum DebugUsbError {
+    #[error("No DebugUSB device found")]
+    DeviceNotFound,
+    #[error("USB error: {0}")]
+    Nusb(#[from] nusb::Error),
+    #[error("Do not know {0:?} portal endpoint for device version {1:x}")]
+    MissingEndpoint(KisPortal, u16),
+    #[error("I/O Error: {0}")]
+    Io(#[from] std::io::Error),
+    #[error("Timed out")]
+    Timeout(#[from] tokio::time::error::Elapsed),
+}
 
-        let device = device.open().await.context("open device")?;
-        device
-            .set_configuration(1)
-            .await
-            .context("set configuration")?;
-        let interface = device.claim_interface(0).await.context("claim interface")?;
+impl DebugUsb {
+    async fn open(base: Option<u64>) -> Result<Self, DebugUsbError> {
+        let device = list_devices()
+            .await?
+            .find(|dev| dev.vendor_id() == 0x05ac && dev.product_id() == 0x1881)
+            .ok_or(DebugUsbError::DeviceNotFound)?;
+
+        let device = device.open().await?;
+        device.set_configuration(1).await?;
+        let interface = device.claim_interface(0).await?;
 
         let mut dbgusb = Self {
             interface,
@@ -144,7 +154,8 @@ impl DebugUsb {
     async fn get_rx(
         &mut self,
         ep_id: u8,
-    ) -> anyhow::Result<&mut Pin<Box<dyn Stream<Item = std::io::Result<Bytes>> + Send>>> {
+    ) -> Result<&mut Pin<Box<dyn Stream<Item = std::io::Result<Bytes>> + Send>>, DebugUsbError>
+    {
         match self.rx.entry(ep_id) {
             std::collections::hash_map::Entry::Occupied(o) => Ok(o.into_mut()),
             std::collections::hash_map::Entry::Vacant(v) => {
@@ -156,7 +167,7 @@ impl DebugUsb {
     async fn get_tx(
         &mut self,
         ep_id: u8,
-    ) -> anyhow::Result<&mut Pin<Box<dyn Sink<Bytes, Error = std::io::Error> + Send>>> {
+    ) -> Result<&mut Pin<Box<dyn Sink<Bytes, Error = std::io::Error> + Send>>, DebugUsbError> {
         match self.tx.entry(ep_id) {
             std::collections::hash_map::Entry::Occupied(o) => Ok(o.into_mut()),
             std::collections::hash_map::Entry::Vacant(v) => {
@@ -165,24 +176,24 @@ impl DebugUsb {
         }
     }
 
-    async fn tx(&mut self, ep_id: u8, msg: Bytes) -> anyhow::Result<()> {
+    async fn tx(&mut self, ep_id: u8, msg: Bytes) -> Result<(), DebugUsbError> {
         self.get_tx(ep_id).await?.send(msg).await?;
         Ok(())
     }
 
-    async fn rx(&mut self, ep_id: u8) -> anyhow::Result<Bytes> {
+    async fn rx(&mut self, ep_id: u8) -> Result<Bytes, DebugUsbError> {
         Ok(self.get_rx(ep_id).await?.next().await.unwrap()?)
     }
 
-    async fn req(&mut self, ep_id: u8, msg: Bytes) -> anyhow::Result<Bytes> {
-        tracing::trace!("out[{}]: {:x}", ep_id, msg);
+    async fn req(&mut self, ep_id: u8, msg: Bytes) -> Result<Bytes, DebugUsbError> {
+        log::trace!("out[{}]: {:x}", ep_id, msg);
         self.tx(ep_id, msg).await?;
         let res = tokio::time::timeout(Duration::from_millis(250), self.rx(ep_id)).await??;
-        tracing::trace!("in[{}]:  {:x}", ep_id, res);
+        log::trace!("in[{}]:  {:x}", ep_id, res);
         Ok(res)
     }
 
-    async fn guess_base(&mut self) -> anyhow::Result<()> {
+    async fn guess_base(&mut self) -> Result<(), DebugUsbError> {
         let cfg_ep = KisPortal::Config.endpoint_id(self.device_version).unwrap();
         let mut buf = BytesMut::new();
         buf.extend_from_slice(
@@ -218,9 +229,7 @@ impl DebugUsb {
         Ok(())
     }
 
-    async fn enable_portals(
-        &mut self,
-    ) -> anyhow::Result<()> {
+    async fn enable_portals(&mut self) -> Result<(), DebugUsbError> {
         let cfg_ep = KisPortal::Config.endpoint_id(self.device_version).unwrap();
         let mut buf = BytesMut::new();
         buf.extend_from_slice(
@@ -241,14 +250,11 @@ impl DebugUsb {
         Ok(())
     }
 
-    async fn uart_rx(&mut self) -> anyhow::Result<impl AsyncRead + Send + 'static> {
+    async fn uart_rx(&mut self) -> Result<impl AsyncRead + Send + 'static, DebugUsbError> {
         self.enable_portals().await?;
-        let pam_ep = KisPortal::Pam
-            .endpoint_id(self.device_version)
-            .ok_or(anyhow::anyhow!(
-                "Do not know Pam portal endpoint for device version {:x}",
-                self.device_version
-            ))?;
+        let pam_ep = KisPortal::Pam.endpoint_id(self.device_version).ok_or(
+            DebugUsbError::MissingEndpoint(KisPortal::Pam, self.device_version),
+        )?;
         let mut buf = BytesMut::new();
         buf.extend_from_slice(
             KisHeader {
@@ -266,12 +272,9 @@ impl DebugUsb {
         buf.put_u32_le(1);
         self.req(pam_ep, buf.freeze()).await?;
 
-        let ppm_ep = KisPortal::Ppm
-            .endpoint_id(self.device_version)
-            .ok_or(anyhow::anyhow!(
-                "Do not know Ppm portal endpoint for device version {:x}",
-                self.device_version
-            ))?;
+        let ppm_ep = KisPortal::Ppm.endpoint_id(self.device_version).ok_or(
+            DebugUsbError::MissingEndpoint(KisPortal::Ppm, self.device_version),
+        )?;
         let uart_rx = endpoint_rx(&self.interface, ppm_ep).await?;
 
         let stream = uart_rx.try_filter_map(move |mut retbuf| {
@@ -284,11 +287,11 @@ impl DebugUsb {
                 let bytes = retbuf.get_u32_le() as usize;
                 content.truncate(bytes);
 
-                //print!("{}", String::from_utf8_lossy(&content));
+                log::debug!("uart:  {}", String::from_utf8_lossy(&content));
 
                 futures_util::future::ready(Ok(Some(content)))
             } else {
-                tracing::trace!("in[{}]:  {:#x?}", ppm_ep, hdr);
+                log::trace!("in[{}]:  {:#x?}", ppm_ep, hdr);
                 futures_util::future::ready(Ok(None))
             }
         });
@@ -296,13 +299,10 @@ impl DebugUsb {
         Ok(StreamReader::new(stream))
     }
 
-    async fn uart_tx(self) -> anyhow::Result<impl AsyncWrite + Send + 'static> {
-        let pam_ep = KisPortal::Pam
-            .endpoint_id(self.device_version)
-            .ok_or(anyhow::anyhow!(
-                "Do not know Pam portal endpoint for device version {:x}",
-                self.device_version
-            ))?;
+    async fn uart_tx(self) -> Result<impl AsyncWrite + Send + 'static, DebugUsbError> {
+        let pam_ep = KisPortal::Pam.endpoint_id(self.device_version).ok_or(
+            DebugUsbError::MissingEndpoint(KisPortal::Pam, self.device_version),
+        )?;
 
         let sink = futures_util::sink::unfold(self, move |mut dbgusb, mut b: Bytes| async move {
             let with_padding = b.split_off(b.len() - b.len() % 4);
@@ -323,13 +323,15 @@ impl DebugUsb {
                             offset3: 0,
                             args_len: 0xc,
                         }
-                        .as_bytes());
-                        buf.extend_from_slice(
-                            PaArgs {
-                                addr: dbgusb.base + 0x134014,
-                                length: 0x04,
-                            }
-                            .as_bytes());
+                        .as_bytes(),
+                    );
+                    buf.extend_from_slice(
+                        PaArgs {
+                            addr: dbgusb.base + 0x134014,
+                            length: 0x04,
+                        }
+                        .as_bytes(),
+                    );
 
                     buf.freeze()
                 };
@@ -382,8 +384,9 @@ impl DebugUsb {
     }
 }
 
-async fn debugusb_loop(args: &Args, pty: &mut pty::Pty) -> anyhow::Result<()> {
+async fn debugusb_loop(args: &Args, pty: &mut pty::Pty) -> Result<(), DebugUsbError> {
     let mut dbgusb = DebugUsb::open(args.base).await?;
+    log::info!("Device opened");
 
     let rx = dbgusb.uart_rx().await?;
     let tx = dbgusb.uart_tx().await?;
@@ -401,12 +404,12 @@ struct Args {
 }
 
 #[tokio::main(flavor = "current_thread")]
-async fn main() -> anyhow::Result<()> {
-    env_logger::init();
+async fn main() -> Result<(), DebugUsbError> {
+    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
     let args = Args::parse();
 
     let mut pty = pty::Pty::new()?;
-    println!("{}", pty.name());
+    log::debug!("Allocated pty {}", pty.name());
 
     let remove_res = match tokio::fs::remove_file(&"/dev/m1n1").await {
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
@@ -415,10 +418,19 @@ async fn main() -> anyhow::Result<()> {
     };
     remove_res?;
     tokio::fs::symlink(pty.name(), &"/dev/m1n1").await?;
+    log::debug!("Symlinked /dev/m1n1 to {}", pty.name());
 
+    log::info!("Waiting for device");
     loop {
-        if let Err(e) = debugusb_loop(&args, &mut pty).await {
-            println!("{:?}", e);
+        match debugusb_loop(&args, &mut pty).await {
+            Err(DebugUsbError::DeviceNotFound) => {}
+            Err(e) => {
+                log::error!("Disconnected: {:?}", e);
+                log::info!("Waiting for device");
+            }
+            Ok(()) => {
+                log::info!("Waiting for device");
+            }
         }
         std::thread::sleep(Duration::from_secs(1));
     }
