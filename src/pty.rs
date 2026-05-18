@@ -1,31 +1,18 @@
 use std::io;
 use std::io::{Read, Write};
-use std::task::ready;
+use std::os::fd::OwnedFd;
 use std::pin::Pin;
 use std::task::Context;
 use std::task::Poll;
-use std::os::fd::OwnedFd;
+use std::task::ready;
 
-use nix::pty::{
-    posix_openpt,
-    grantpt,
-    unlockpt,
-    ptsname,
-    PtyMaster,
-};
+use nix::fcntl::{OFlag, open};
+use nix::pty::{PtyMaster, grantpt, posix_openpt, ptsname, unlockpt};
 use nix::sys::stat::Mode;
-use nix::sys::termios::{
-    tcgetattr,
-    tcsetattr,
-    LocalFlags,
-};
-use nix::fcntl::{
-    open,
-    OFlag,
-};
+use nix::sys::termios::{LocalFlags, tcgetattr, tcsetattr};
 use nix::unistd::close;
-use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 use tokio::io::unix::AsyncFd;
+use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 
 pub struct Pty {
     name: String,
@@ -47,7 +34,11 @@ impl Pty {
 
         // Keep one client connection open at all times, to prevent hang-up signals from triggering
         // the tokio readiness
-        let client = open(pty_name.as_str(), OFlag::O_RDWR | OFlag::O_NOCTTY, Mode::empty())?;
+        let client = open(
+            pty_name.as_str(),
+            OFlag::O_RDWR | OFlag::O_NOCTTY,
+            Mode::empty(),
+        )?;
 
         Ok(Self {
             name: pty_name,
@@ -65,7 +56,7 @@ impl AsyncRead for Pty {
     fn poll_read(
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
-        buf: &mut ReadBuf<'_>
+        buf: &mut ReadBuf<'_>,
     ) -> Poll<io::Result<()>> {
         loop {
             let mut guard = ready!(self.inner.as_mut().unwrap().poll_read_ready(cx))?;
@@ -76,7 +67,7 @@ impl AsyncRead for Pty {
                 Ok(Ok(len)) => {
                     buf.advance(len);
                     return Poll::Ready(Ok(()));
-                },
+                }
                 Ok(Err(err)) => return Poll::Ready(Err(err)),
                 Err(_would_block) => continue,
             }
@@ -88,7 +79,7 @@ impl AsyncWrite for Pty {
     fn poll_write(
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
-        buf: &[u8]
+        buf: &[u8],
     ) -> Poll<io::Result<usize>> {
         loop {
             let mut guard = ready!(self.inner.as_mut().unwrap().poll_write_ready(cx))?;
@@ -100,17 +91,11 @@ impl AsyncWrite for Pty {
         }
     }
 
-    fn poll_flush(
-        self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-    ) -> Poll<io::Result<()>> {
+    fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
         Poll::Ready(Ok(()))
     }
 
-    fn poll_shutdown(
-        self: Pin<&mut Self>,
-        _cx: &mut Context<'_>,
-    ) -> Poll<io::Result<()>> {
+    fn poll_shutdown(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<io::Result<()>> {
         Poll::Ready(Ok(()))
     }
 }

@@ -6,6 +6,8 @@ edition = "2024"
 [dependencies]
 anyhow = "1.0.102"
 bytes = "1.11.1"
+clap = { version = "4.6.1", features = ["derive"] }
+clap-num = "1.2.0"
 futures-util = { version = "0.3.32", features = ["sink"] }
 nix = { version = "0.31.3", features = ["fs", "term"] }
 nusb = { version = "0.2.3", features = ["tokio"] }
