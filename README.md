@@ -26,7 +26,7 @@ The following working base addresses have been determined based on Wireshark USB
 | MacBook Pro (14-inch, M1 Pro, 2021) | t6000-j314s |                         1.20 | 0x292400000 |
 | MacBook Air (13-inch, M2, 2022)     | t8112-j413  |                         2.00 | 0x23d000000 |
 | Mac Mini (M4, 2024)                 | t8132-j773g |                         4.00 | 0x3c8000000 |
-| Mac Mini (M4 Pro, 2024)             | t8132-j773s |                         4.00 | 0x548700000 |
+| Mac Mini (M4 Pro, 2024)             | t6040-j773s |                         4.00 | 0x548700000 |
 | MacBook Neo (A18 Pro, 2026)         | t8140-j700  |                         4.00 | 0x348000000 |
 
 
