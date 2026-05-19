@@ -1,7 +1,7 @@
 # kisd
 
 kisd is a daemon which implements parts of the KIS / DebugUSB protocol.
-The main use at this time is getting accessing the "dockchannel uart" of Apple
+The main use at this time is accessing the "dockchannel uart" of Apple
 Silicon machines from a device running Asahi Linux.
 
 
@@ -18,7 +18,7 @@ Silicon machines from a device running Asahi Linux.
 
 Currently it is not known how the correct write addresses to use in the DebugUSB messages for input / key presses are determined based on the previous handshake messages. If no `--base` is specified, kisd will attempt to guess the address in a way which works for some devices, but not all.
 
-The following working base addresses have been determined based on Wireshark USB dumps of the DebugUSB communication under Mac OS.
+The following working base addresses have been determined based on Wireshark USB dumps of the DebugUSB communication under macOS.
 
 | Device                              | Codename    | Protocol Version (bcdDevice) | Base        |
 | ----------------------------------- | ----------- | ---------------------------- | ----------- |
