@@ -1,0 +1,4 @@
+# Handle Apple silicon Macs (and iOS devices) in debug USB mode - for use with m1n1
+
+# Change group and permissions of Apple silicon Macs in debug USB mode
+ACTION=="add", SUBSYSTEM=="usb", ATTR{idVendor}=="05ac", ATTR{idProduct}=="1881", OWNER="root", GROUP="dialout", MODE="0660"

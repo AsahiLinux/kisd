@@ -14,6 +14,16 @@ Silicon machines from a device running Asahi Linux.
 - Run your m1n1 proxyclient commands against /dev/m1n1 as usual, or connect with picocom (baud rate doesn't matter)
 
 
+### Setup
+For use as non-root user a udev rules file is provided to change the group
+of the USB device to 'dialout'. In this case the '/dev/m1n1' symlink will
+not be created and the pty has to be used directly, for example via
+`export M1N1DEVICE=/dev/pts/X`.
+This requires following install steps:
+- install etc/udev/rules.d/85-apple-debugusb.rules to /etc/udev/rules.d/
+- `sudo udevadm control -R`
+
+
 ### Base addresses
 
 Currently it is not known how the correct write addresses to use in the DebugUSB messages for input / key presses are determined based on the previous handshake messages. If no `--base` is specified, kisd will attempt to guess the address in a way which works for some devices, but not all.
