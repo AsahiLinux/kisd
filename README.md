@@ -32,4 +32,4 @@ The following working base addresses have been determined based on Wireshark USB
 
 ### Credits
 
-Thanks to Sven Peter for the earlier work and documentation on DebugUSB.
+Thanks to Sven Peter for the earlier work and documentation on DebugUSB and Fiona Behrens for help with USB basics.
