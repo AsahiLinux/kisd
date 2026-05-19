@@ -420,8 +420,17 @@ async fn main() -> Result<(), DebugUsbError> {
         Ok(()) => Ok(()),
     };
     remove_res?;
-    tokio::fs::symlink(pty.name(), &"/dev/m1n1").await?;
-    log::debug!("Symlinked /dev/m1n1 to {}", pty.name());
+
+    match tokio::fs::symlink(pty.name(), &"/dev/m1n1").await {
+        Ok(()) => log::debug!("Symlinked /dev/m1n1 to {}", pty.name()),
+        Err(e) if e.kind() == std::io::ErrorKind::PermissionDenied => {
+            log::warn!(
+                "No permissions to create /dev/m1n1 symlink using pty {}",
+                pty.name()
+            );
+        }
+        Err(e) => return Err(DebugUsbError::Io(e)),
+    };
 
     log::info!("Waiting for device");
     loop {
