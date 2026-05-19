@@ -25,6 +25,9 @@ The following working base addresses have been determined based on Wireshark USB
 | M1      | t8103    |                         1.20 | 0x23d000000 | ?       |
 | M1 Pro  | t6000    |                         1.20 | 0x292400000 | ?       |
 | M2      | t8112    |                         2.00 | 0x23d000000 | ?       |
+| M2 Pro  | t6020    |                         3.00 | 0x29e400000 | ()      |
+| M3      | t8122    |                         4.00 | 0x2e4000000 | (x)     |
+| M3 Max  | t6031    |                         4.00 | 0x2a0400000 | ()      |
 | M4      | t8132    |                         4.00 | 0x3c8000000 | ?       |
 | M4 Pro  | t6040    |                         4.00 | 0x548700000 | ?       |
 | A18 Pro | t8140    |                         4.00 | 0x348000000 | ?       |
