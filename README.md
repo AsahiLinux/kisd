@@ -20,15 +20,14 @@ Currently it is not known how the correct write addresses to use in the DebugUSB
 
 The following working base addresses have been determined based on Wireshark USB dumps of the DebugUSB communication under macOS.
 
-| Device                              | Codename    | Protocol Version (bcdDevice) | Base        |
-| ----------------------------------- | ----------- | ---------------------------- | ----------- |
-| MacBook Air (M1, 2020)              | t8103-j313  |                         1.20 | 0x23d000000 |
-| MacBook Pro (14-inch, M1 Pro, 2021) | t6000-j314s |                         1.20 | 0x292400000 |
-| MacBook Air (13-inch, M2, 2022)     | t8112-j413  |                         2.00 | 0x23d000000 |
-| Mac Mini (M4, 2024)                 | t8132-j773g |                         4.00 | 0x3c8000000 |
-| Mac Mini (M4 Pro, 2024)             | t6040-j773s |                         4.00 | 0x548700000 |
-| MacBook Neo (A18 Pro, 2026)         | t8140-j700  |                         4.00 | 0x348000000 |
-
+| Chip    | Codename | Protocol Version (bcdDevice) | Base        |
+| ------- | -------- | ---------------------------- | ----------- |
+| M1      | t8103    |                         1.20 | 0x23d000000 |
+| M1 Pro  | t6000    |                         1.20 | 0x292400000 |
+| M2      | t8112    |                         2.00 | 0x23d000000 |
+| M4      | t8132    |                         4.00 | 0x3c8000000 |
+| M4 Pro  | t6040    |                         4.00 | 0x548700000 |
+| A18 Pro | t8140    |                         4.00 | 0x348000000 |
 
 ### Credits
 
