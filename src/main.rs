@@ -90,7 +90,7 @@ impl KisPortal {
         match (device_version, self) {
             (_, KisPortal::Config) => Some(1),
 
-            // bcdDevice 1.20: M1, M1 Pro
+            // bcdDevice 1.20: M1 / Pro / Max
             (0x120, KisPortal::Pam) => Some(1),
             (0x120, KisPortal::Ppm) => Some(2),
 
