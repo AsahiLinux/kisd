@@ -39,8 +39,12 @@ The following working base addresses have been determined based on Wireshark USB
 | M2      | t8112    |                         2.00 | 0x23d000000 | :white_check_mark: | :white_check_mark: |
 | M2 Pro  | t6020    |                         3.00 | 0x29e400000 | :x:                | :white_check_mark: |
 | M2 Ultra| t6022    |                         3.00 | 0x29e400000 | :x:                | :white_check_mark: |
+| M2 Max  | t6021    |                         3.00 | 0x29e400000 | :x:                | :x:                |
 | M3      | t8122    |                         4.00 | 0x2e4000000 | :white_check_mark: | :white_check_mark: |
+| M3 Pro  | t6030    |                         4.00 | 0x364000000 | :white_check_mark: | :white_check_mark: |
 | M3 Max  | t6031    |                         4.00 | 0x2a0400000 | :x:                | :white_check_mark: |
+| M3 Max  | t6034    |                         4.00 | 0x2a0400000 | :x:                | :x:                |
+| M3 Ultra| t6032    |                         4.00 | 0x2a0400000 | :x:                | :x:                |
 | M4      | t8132    |                         4.00 | 0x3c8000000 | :white_check_mark: | :white_check_mark: |
 | M4 Pro  | t6040    |                         4.00 | 0x548700000 | :x:                | :white_check_mark: |
 | A18 Pro | t8140    |                         4.00 | 0x348000000 | :white_check_mark: | :white_check_mark: |
