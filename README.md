@@ -30,20 +30,20 @@ Currently it is not known how the correct write addresses to use in the DebugUSB
 
 The following working base addresses have been determined based on Wireshark USB dumps of the DebugUSB communication under macOS.
 
-| Chip    | Codename | Protocol Version (bcdDevice) | Base        | auto-detected      |
-| ------- | -------- | ---------------------------- | ----------- | ------------------ |
-| M1      | t8103    |                         1.20 | 0x23d000000 | :white_check_mark: |
-| M1 Pro  | t6000    |                         1.20 | 0x292400000 | :x:                |
-| M1 Max  | t6001    |                         1.20 | 0x292400000 | :x:                |
-| M1 Ultra| t6002    |                         1.20 | 0x292400000 | :x:                |
-| M2      | t8112    |                         2.00 | 0x23d000000 | :white_check_mark: |
-| M2 Pro  | t6020    |                         3.00 | 0x29e400000 | :x:                |
-| M2 Ultra| t6022    |                         3.00 | 0x29e400000 | :x:                |
-| M3      | t8122    |                         4.00 | 0x2e4000000 | :white_check_mark: |
-| M3 Max  | t6031    |                         4.00 | 0x2a0400000 | :x:                |
-| M4      | t8132    |                         4.00 | 0x3c8000000 | :white_check_mark: |
-| M4 Pro  | t6040    |                         4.00 | 0x548700000 | :x:                |
-| A18 Pro | t8140    |                         4.00 | 0x348000000 | :white_check_mark: |
+| Chip    | Codename | Protocol Version (bcdDevice) | Base        | auto-detected      | verified           |
+| ------- | -------- | ---------------------------- | ----------- | ------------------ | ------------------ |
+| M1      | t8103    |                         1.20 | 0x23d000000 | :white_check_mark: | :white_check_mark: |
+| M1 Pro  | t6000    |                         1.20 | 0x292400000 | :x:                | :white_check_mark: |
+| M1 Max  | t6001    |                         1.20 | 0x292400000 | :x:                | :white_check_mark: |
+| M1 Ultra| t6002    |                         1.20 | 0x292400000 | :x:                | :white_check_mark: |
+| M2      | t8112    |                         2.00 | 0x23d000000 | :white_check_mark: | :white_check_mark: |
+| M2 Pro  | t6020    |                         3.00 | 0x29e400000 | :x:                | :white_check_mark: |
+| M2 Ultra| t6022    |                         3.00 | 0x29e400000 | :x:                | :white_check_mark: |
+| M3      | t8122    |                         4.00 | 0x2e4000000 | :white_check_mark: | :white_check_mark: |
+| M3 Max  | t6031    |                         4.00 | 0x2a0400000 | :x:                | :white_check_mark: |
+| M4      | t8132    |                         4.00 | 0x3c8000000 | :white_check_mark: | :white_check_mark: |
+| M4 Pro  | t6040    |                         4.00 | 0x548700000 | :x:                | :white_check_mark: |
+| A18 Pro | t8140    |                         4.00 | 0x348000000 | :white_check_mark: | :white_check_mark: |
 
 ### Credits
 
