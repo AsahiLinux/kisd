@@ -37,6 +37,7 @@ The following working base addresses have been determined based on Wireshark USB
 | M1 Max  | t6001    |                         1.20 | 0x292400000 | :x:                | :white_check_mark: |
 | M1 Ultra| t6002    |                         1.20 | 0x292400000 | :x:                | :white_check_mark: |
 | M2      | t8112    |                         2.00 | 0x23d000000 | :white_check_mark: | :white_check_mark: |
+| A16     | t8120    |                         2.00 | 0x23d000000 | :white_check_mark: | :white_check_mark: |
 | M2 Pro  | t6020    |                         3.00 | 0x29e400000 | :x:                | :white_check_mark: |
 | M2 Ultra| t6022    |                         3.00 | 0x29e400000 | :x:                | :white_check_mark: |
 | M2 Max  | t6021    |                         3.00 | 0x29e400000 | :x:                | :x:                |
