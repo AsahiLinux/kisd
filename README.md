@@ -33,7 +33,7 @@ The following working base addresses have been determined based on Wireshark USB
 | Chip    | Codename | Protocol Version (bcdDevice) | Base        | auto-detected      | verified           |
 | ------- | -------- | ---------------------------- | ----------- | ------------------ | ------------------ |
 | M1      | t8103    |                         1.20 | 0x23d000000 | :white_check_mark: | :white_check_mark: |
-| M1 Pro  | t6000    |                         1.20 | 0x292400000 | :question:         | :white_check_mark: |
+| M1 Pro  | t6000    |                         1.20 | 0x292400000 | :white_check_mark: | :white_check_mark: |
 | M1 Max  | t6001    |                         1.20 | 0x292400000 | :question:         | :white_check_mark: |
 | M1 Ultra| t6002    |                         1.20 | 0x292400000 | :question:         | :white_check_mark: |
 | M2      | t8112    |                         2.00 | 0x23d000000 | :white_check_mark: | :white_check_mark: |
@@ -45,10 +45,10 @@ The following working base addresses have been determined based on Wireshark USB
 | A17 Pro | t8130    |                         4.00 | 0x2e4000000 | :white_check_mark: | :white_check_mark: |
 | M3 Pro  | t6030    |                         4.00 | 0x364000000 | :white_check_mark: | :white_check_mark: |
 | M3 Max  | t6031    |                         4.00 | 0x2a0400000 | :question:         | :white_check_mark: |
-| M3 Max  | t6034    |                         4.00 | 0x2a0400000 | :question:         | :white_check_mark: |
+| M3 Max  | t6034    |                         4.00 | 0x2a0400000 | :white_check_mark: | :white_check_mark: |
 | M3 Ultra| t6032    |                         4.00 | 0x2a0400000 | :question:         | :x:                |
 | M4      | t8132    |                         4.00 | 0x3c8000000 | :white_check_mark: | :white_check_mark: |
-| M4 Pro  | t6040    |                         4.00 | 0x548700000 | :question:         | :white_check_mark: |
+| M4 Pro  | t6040    |                         4.00 | 0x548700000 | :white_check_mark: | :white_check_mark: |
 | A18 Pro | t8140    |                         4.00 | 0x348000000 | :white_check_mark: | :white_check_mark: |
 | A19     | t8150    |                         4.00 | 0x348000000 | :white_check_mark: | :white_check_mark: |
 
