@@ -134,6 +134,8 @@ enum DebugUsbError {
     Read,
     #[error("Alignment error")]
     Alignment,
+    #[error("Unknown base")]
+    UnknownBase,
 }
 
 impl DebugUsb {
@@ -236,10 +238,17 @@ impl DebugUsb {
             base &= !0x1000000;
         }
 
-        log::info!("Guessed base = 0x{:x}", base);
-        self.base = base;
+        for off in [0x0, 0x400000, 0x700000] {
+            self.base = base + off;
+            log::info!("Trying base = 0x{:x}", self.base);
+            if self.uart_tx_free().await.is_ok() {
+                log::info!("Guessed base = 0x{:x}", self.base);
+                return Ok(());
+            }
+        }
 
-        Ok(())
+        self.base = 0;
+        Err(DebugUsbError::UnknownBase)
     }
 
     async fn enable_portals(&mut self) -> Result<(), DebugUsbError> {
