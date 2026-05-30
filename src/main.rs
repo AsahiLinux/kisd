@@ -85,6 +85,12 @@ enum KisCommand {
     //Pswd = 5,
 }
 
+const DATA_TX_FREE: u64 = 0x4014;
+const DATA_TX8: u64 = 0x4004;
+const DATA_TX16: u64 = 0x4008;
+const DATA_TX24: u64 = 0x400c;
+const DATA_TX32: u64 = 0x4010;
+
 impl KisPortal {
     fn endpoint_id(&self, device_version: u16) -> Option<u8> {
         match (device_version, self) {
@@ -124,6 +130,10 @@ enum DebugUsbError {
     Io(#[from] std::io::Error),
     #[error("Timed out")]
     Timeout(#[from] tokio::time::error::Elapsed),
+    #[error("Read error")]
+    Read,
+    #[error("Alignment error")]
+    Alignment,
 }
 
 impl DebugUsb {
@@ -302,83 +312,117 @@ impl DebugUsb {
         Ok(StreamReader::new(stream))
     }
 
-    async fn uart_tx(self) -> Result<impl AsyncWrite + Send + 'static, DebugUsbError> {
+    async fn uart_tx_free(&mut self) -> Result<usize, DebugUsbError> {
         let pam_ep = KisPortal::Pam.endpoint_id(self.device_version).ok_or(
             DebugUsbError::MissingEndpoint(KisPortal::Pam, self.device_version),
         )?;
 
-        let sink = futures_util::sink::unfold(self, move |mut dbgusb, mut b: Bytes| async move {
-            let with_padding = b.split_off(b.len() - b.len() % 4);
-            for msg in [b, with_padding] {
-                if msg.is_empty() {
-                    continue;
+        let cmd = {
+            let mut buf = BytesMut::new();
+            buf.extend_from_slice(
+                KisHeader {
+                    sequence: 0x1155,
+                    version: 0xa0,
+                    portal: KisPortal::Pam as u8,
+                    command: KisCommand::Par as u8,
+                    offset1: 0,
+                    offset2: 0,
+                    offset3: 0,
+                    args_len: 0xc,
                 }
-                let cmd = {
-                    let mut buf = BytesMut::new();
-                    buf.extend_from_slice(
-                        KisHeader {
-                            sequence: 0x1155,
-                            version: 0xa0,
-                            portal: KisPortal::Pam as u8,
-                            command: KisCommand::Par as u8,
-                            offset1: 0,
-                            offset2: 0,
-                            offset3: 0,
-                            args_len: 0xc,
-                        }
-                        .as_bytes(),
-                    );
-                    buf.extend_from_slice(
-                        PaArgs {
-                            addr: dbgusb.base + 0x134014,
-                            length: 0x04,
-                        }
-                        .as_bytes(),
-                    );
+                .as_bytes(),
+            );
+            buf.extend_from_slice(
+                PaArgs {
+                    addr: self.base + 0x130000 + DATA_TX_FREE,
+                    length: 0x04,
+                }
+                .as_bytes(),
+            );
 
-                    buf.freeze()
+            buf.freeze()
+        };
+        let mut resp = self.req(pam_ep, cmd).await.map_err(std::io::Error::other)?;
+
+        let hdr_bytes = resp.split_to(std::mem::size_of::<KisHeader>());
+        let _hdr = KisHeader::ref_from_bytes(&hdr_bytes).unwrap();
+
+        let word1 = resp.get_u32_le();
+        let word2 = resp.get_u32_le();
+        let _word3 = resp.get_u32_le();
+
+        if word2 == 0 {
+            return Err(DebugUsbError::Read);
+        }
+
+        Ok(word1 as usize)
+    }
+
+    async fn uart_tx(&mut self, data: Bytes) -> Result<(), DebugUsbError> {
+        if data.len() > 4 && !data.len().is_multiple_of(4) {
+            return Err(DebugUsbError::Alignment);
+        }
+
+        let pam_ep = KisPortal::Pam.endpoint_id(self.device_version).ok_or(
+            DebugUsbError::MissingEndpoint(KisPortal::Pam, self.device_version),
+        )?;
+        let payload_len = data.len().next_multiple_of(4);
+        let padding_bytes = payload_len - data.len();
+        let cmd = {
+            let mut buf = BytesMut::new();
+
+            buf.extend_from_slice(
+                KisHeader {
+                    sequence: 0x1160,
+                    version: 0xa0,
+                    portal: KisPortal::Pam as u8,
+                    command: KisCommand::Paw as u8,
+                    offset1: 0,
+                    offset2: 0,
+                    offset3: 0,
+                    args_len: 12 + (payload_len as u32),
+                }
+                .as_bytes(),
+            );
+
+            let addr = self.base
+                + 0x130000
+                + match data.len() {
+                    1 => DATA_TX8,
+                    2 => DATA_TX16,
+                    3 => DATA_TX24,
+                    n => DATA_TX32,
                 };
-                dbgusb
-                    .req(pam_ep, cmd)
-                    .await
-                    .map_err(std::io::Error::other)?;
+            buf.extend_from_slice(
+                PaArgs {
+                    addr,
+                    length: payload_len as u32,
+                }
+                .as_bytes(),
+            );
 
-                let padding_bytes = (4 - (msg.len() % 4)) % 4;
-                let cmd = {
-                    let mut buf = BytesMut::new();
+            buf.put(data);
+            buf.put_bytes(0, padding_bytes);
 
-                    buf.extend_from_slice(
-                        KisHeader {
-                            sequence: 0x1160,
-                            version: 0xa0,
-                            portal: KisPortal::Pam as u8,
-                            command: KisCommand::Paw as u8,
-                            offset1: 0,
-                            offset2: 0,
-                            offset3: 0,
-                            args_len: (12 + msg.len() + padding_bytes) as u32,
-                        }
-                        .as_bytes(),
-                    );
+            buf.freeze()
+        };
+        self.req(pam_ep, cmd).await.map_err(std::io::Error::other)?;
+        Ok(())
+    }
 
-                    buf.extend_from_slice(
-                        PaArgs {
-                            addr: dbgusb.base + 0x134000 + 4 * (4 - padding_bytes as u64),
-                            length: (msg.len() + padding_bytes) as u32,
-                        }
-                        .as_bytes(),
-                    );
-
-                    buf.put(msg);
-                    buf.put_bytes(0, padding_bytes);
-
-                    buf.freeze()
-                };
-                dbgusb
-                    .req(pam_ep, cmd)
-                    .await
-                    .map_err(std::io::Error::other)?;
-                //println!("in:  {:x}", res);
+    async fn into_uart_tx(self) -> Result<impl AsyncWrite + Send + 'static, DebugUsbError> {
+        let sink = futures_util::sink::unfold(self, move |mut dbgusb, mut b: Bytes| async move {
+            while b.len() >= 4 {
+                let free = dbgusb.uart_tx_free().await.map_err(std::io::Error::other)?;
+                let mut batch = b.split_to(std::cmp::min(free, b.len()) & !3);
+                dbgusb.uart_tx(batch).await.map_err(std::io::Error::other)?;
+            }
+            if !b.is_empty() {
+                while {
+                    let free = dbgusb.uart_tx_free().await.map_err(std::io::Error::other)?;
+                    free < b.len()
+                } {}
+                dbgusb.uart_tx(b).await.map_err(std::io::Error::other)?;
             }
             Ok::<_, std::io::Error>(dbgusb)
         });
@@ -392,7 +436,7 @@ async fn debugusb_loop(args: &Args, pty: &mut pty::Pty) -> Result<(), DebugUsbEr
     log::info!("Device opened");
 
     let rx = dbgusb.uart_rx().await?;
-    let tx = dbgusb.uart_tx().await?;
+    let tx = dbgusb.into_uart_tx().await?;
     let uart = tokio::io::join(rx, tx);
     let mut uart = std::pin::pin!(uart);
     tokio::io::copy_bidirectional(&mut uart, pty).await?;
