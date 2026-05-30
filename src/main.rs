@@ -116,6 +116,7 @@ struct DebugUsb {
     interface: nusb::Interface,
     rx: HashMap<u8, Pin<Box<dyn Stream<Item = std::io::Result<Bytes>> + Send>>>,
     tx: HashMap<u8, Pin<Box<dyn Sink<Bytes, Error = std::io::Error> + Send>>>,
+    capacity: usize,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -155,6 +156,7 @@ impl DebugUsb {
             device_version: device.device_descriptor().device_version(),
             rx: Default::default(),
             tx: Default::default(),
+            capacity: 0,
         };
 
         if base.is_none() {
@@ -201,7 +203,7 @@ impl DebugUsb {
     async fn req(&mut self, ep_id: u8, msg: Bytes) -> Result<Bytes, DebugUsbError> {
         log::trace!("out[{}]: {:x}", ep_id, msg);
         self.tx(ep_id, msg).await?;
-        let res = tokio::time::timeout(Duration::from_millis(250), self.rx(ep_id)).await??;
+        let res = tokio::time::timeout(Duration::from_millis(2500), self.rx(ep_id)).await??;
         log::trace!("in[{}]:  {:x}", ep_id, res);
         Ok(res)
     }
@@ -377,6 +379,7 @@ impl DebugUsb {
         )?;
         let payload_len = data.len().next_multiple_of(4);
         let padding_bytes = payload_len - data.len();
+        self.capacity -= data.len();
         let cmd = {
             let mut buf = BytesMut::new();
 
@@ -421,17 +424,25 @@ impl DebugUsb {
 
     async fn into_uart_tx(self) -> Result<impl AsyncWrite + Send + 'static, DebugUsbError> {
         let sink = futures_util::sink::unfold(self, move |mut dbgusb, mut b: Bytes| async move {
-            while b.len() >= 4 {
-                let free = dbgusb.uart_tx_free().await.map_err(std::io::Error::other)?;
-                let mut batch = b.split_to(std::cmp::min(free, b.len()) & !3);
+            while !b.is_empty() {
+                const MAX_PACKET_SIZE: usize = 512;
+                const MAX_PAYLOAD_SIZE: usize = MAX_PACKET_SIZE
+                    - std::mem::size_of::<KisHeader>()
+                    - std::mem::size_of::<PaArgs>()
+                    - 4; // ?
+                let mut payload_size = std::cmp::min(MAX_PAYLOAD_SIZE, b.len());
+                if dbgusb.capacity < payload_size {
+                    dbgusb.capacity = dbgusb.uart_tx_free().await.map_err(std::io::Error::other)?;
+                }
+                if dbgusb.capacity == 0 {
+                    continue;
+                }
+                payload_size = std::cmp::min(payload_size, dbgusb.capacity);
+                if payload_size > 4 {
+                    payload_size = payload_size & !3;
+                }
+                let batch = b.split_to(payload_size);
                 dbgusb.uart_tx(batch).await.map_err(std::io::Error::other)?;
-            }
-            if !b.is_empty() {
-                while {
-                    let free = dbgusb.uart_tx_free().await.map_err(std::io::Error::other)?;
-                    free < b.len()
-                } {}
-                dbgusb.uart_tx(b).await.map_err(std::io::Error::other)?;
             }
             Ok::<_, std::io::Error>(dbgusb)
         });
