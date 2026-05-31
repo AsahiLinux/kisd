@@ -302,14 +302,24 @@ impl DebugUsb {
         let uart_rx = endpoint_rx(&self.interface, ppm_ep).await?;
 
         let stream = uart_rx.try_filter_map(move |mut retbuf| {
+            if retbuf.len() < std::mem::size_of::<KisHeader>() {
+                log::warn!("short ppm packet");
+                return futures_util::future::ready(Ok(None));
+            }
             let hdr_bytes = retbuf.split_to(std::mem::size_of::<KisHeader>());
             let hdr = KisHeader::ref_from_bytes(&hdr_bytes).unwrap();
 
             if hdr.portal == KisPortal::Ppm as u8 {
-                let words = retbuf.get_u32_le() as usize;
-                let mut content = retbuf.split_to(words * 4);
-                let bytes = retbuf.get_u32_le() as usize;
-                content.truncate(bytes);
+                let Ok(words) = retbuf.try_get_u32_le() else {
+                    log::warn!("short ppm packet: {:x?} {:x}", hdr, retbuf);
+                    return futures_util::future::ready(Ok(None));
+                };
+                let mut content = retbuf.split_to(words as usize * 4);
+                let Ok(bytes) = retbuf.try_get_u32_le() else {
+                    log::warn!("short ppm packet");
+                    return futures_util::future::ready(Ok(None));
+                };
+                content.truncate(bytes as usize);
 
                 log::debug!("uart:  {}", String::from_utf8_lossy(&content));
 
