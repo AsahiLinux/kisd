@@ -413,7 +413,7 @@ impl DebugUsb {
                     1 => DATA_TX8,
                     2 => DATA_TX16,
                     3 => DATA_TX24,
-                    n => DATA_TX32,
+                    _ => DATA_TX32,
                 };
             buf.extend_from_slice(
                 PaArgs {
@@ -449,7 +449,7 @@ impl DebugUsb {
                 }
                 payload_size = std::cmp::min(payload_size, dbgusb.capacity);
                 if payload_size > 4 {
-                    payload_size = payload_size & !3;
+                    payload_size &= !3;
                 }
                 let batch = b.split_to(payload_size);
                 dbgusb.uart_tx(batch).await.map_err(std::io::Error::other)?;
