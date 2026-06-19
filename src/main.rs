@@ -117,6 +117,7 @@ struct DebugUsb {
     rx: HashMap<u8, Pin<Box<dyn Stream<Item = std::io::Result<Bytes>> + Send>>>,
     tx: HashMap<u8, Pin<Box<dyn Sink<Bytes, Error = std::io::Error> + Send>>>,
     capacity: usize,
+    uart_channel: u8,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -140,7 +141,7 @@ enum DebugUsbError {
 }
 
 impl DebugUsb {
-    async fn open(base: Option<u64>) -> Result<Self, DebugUsbError> {
+    async fn open(base: Option<u64>, uart_channel: u8) -> Result<Self, DebugUsbError> {
         let device = list_devices()
             .await?
             .find(|dev| dev.vendor_id() == 0x05ac && dev.product_id() == 0x1881)
@@ -157,6 +158,7 @@ impl DebugUsb {
             rx: Default::default(),
             tx: Default::default(),
             capacity: 0,
+            uart_channel,
         };
 
         if base.is_none() {
@@ -243,7 +245,7 @@ impl DebugUsb {
         for off in [0x0, 0x400000, 0x700000] {
             self.base = base + off;
             log::info!("Trying base = 0x{:x}", self.base);
-            if self.uart_tx_free().await.is_ok() {
+            if self.uart_tx_free(0).await.is_ok() {
                 log::info!("Guessed base = 0x{:x}", self.base);
                 return Ok(());
             }
@@ -293,13 +295,14 @@ impl DebugUsb {
             }
             .as_bytes(),
         );
-        buf.put_u32_le(1);
+        buf.put_u32_le(0b1111_1111);
         self.req(pam_ep, buf.freeze()).await?;
 
         let ppm_ep = KisPortal::Ppm.endpoint_id(self.device_version).ok_or(
             DebugUsbError::MissingEndpoint(KisPortal::Ppm, self.device_version),
         )?;
         let uart_rx = endpoint_rx(&self.interface, ppm_ep).await?;
+        let uart_channel = self.uart_channel;
 
         let stream = uart_rx.try_filter_map(move |mut retbuf| {
             if retbuf.len() < std::mem::size_of::<KisHeader>() {
@@ -321,19 +324,25 @@ impl DebugUsb {
                 };
                 content.truncate(bytes as usize);
 
-                log::debug!("uart:  {}", String::from_utf8_lossy(&content));
-
-                futures_util::future::ready(Ok(Some(content)))
+                let channel = hdr.offset1 >> 4;
+                log::debug!("uart[{}]:  {}", channel, String::from_utf8_lossy(&content));
+                if channel == uart_channel {
+                    return futures_util::future::ready(Ok(Some(content)));
+                }
             } else {
                 log::trace!("in[{}]:  {:#x?}", ppm_ep, hdr);
-                futures_util::future::ready(Ok(None))
             }
+            futures_util::future::ready(Ok(None))
         });
 
         Ok(StreamReader::new(stream))
     }
 
-    async fn uart_tx_free(&mut self) -> Result<usize, DebugUsbError> {
+    fn uart_base(&self, channel: u8) -> u64 {
+        self.base + 0x130000 + ((channel as u64) << 16)
+    }
+
+    async fn uart_tx_free(&mut self, channel: u8) -> Result<usize, DebugUsbError> {
         let pam_ep = KisPortal::Pam.endpoint_id(self.device_version).ok_or(
             DebugUsbError::MissingEndpoint(KisPortal::Pam, self.device_version),
         )?;
@@ -355,7 +364,7 @@ impl DebugUsb {
             );
             buf.extend_from_slice(
                 PaArgs {
-                    addr: self.base + 0x130000 + DATA_TX_FREE,
+                    addr: self.uart_base(channel) + DATA_TX_FREE,
                     length: 0x04,
                 }
                 .as_bytes(),
@@ -407,8 +416,7 @@ impl DebugUsb {
                 .as_bytes(),
             );
 
-            let addr = self.base
-                + 0x130000
+            let addr = self.uart_base(self.uart_channel)
                 + match data.len() {
                     1 => DATA_TX8,
                     2 => DATA_TX16,
@@ -442,7 +450,10 @@ impl DebugUsb {
                     - 4; // ?
                 let mut payload_size = std::cmp::min(MAX_PAYLOAD_SIZE, b.len());
                 if dbgusb.capacity < payload_size {
-                    dbgusb.capacity = dbgusb.uart_tx_free().await.map_err(std::io::Error::other)?;
+                    dbgusb.capacity = dbgusb
+                        .uart_tx_free(dbgusb.uart_channel)
+                        .await
+                        .map_err(std::io::Error::other)?;
                 }
                 if dbgusb.capacity == 0 {
                     continue;
@@ -462,7 +473,7 @@ impl DebugUsb {
 }
 
 async fn debugusb_loop(args: &Args, pty: &mut pty::Pty) -> Result<(), DebugUsbError> {
-    let mut dbgusb = DebugUsb::open(args.base).await?;
+    let mut dbgusb = DebugUsb::open(args.base, args.channel).await?;
     log::info!("Device opened");
 
     let rx = dbgusb.uart_rx().await?;
@@ -478,6 +489,8 @@ async fn debugusb_loop(args: &Args, pty: &mut pty::Pty) -> Result<(), DebugUsbEr
 struct Args {
     #[arg(short, long, value_parser=maybe_hex::<u64>)]
     base: Option<u64>,
+    #[arg(short, long, default_value = "0")]
+    channel: u8,
 }
 
 #[tokio::main(flavor = "current_thread")]
