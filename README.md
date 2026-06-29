@@ -51,6 +51,7 @@ The following working base addresses have been determined based on Wireshark USB
 | M4 Pro  | t6040    |                         4.00 | 0x548700000 | :white_check_mark: | :white_check_mark: |
 | A18 Pro | t8140    |                         4.00 | 0x348000000 | :white_check_mark: | :white_check_mark: |
 | A19     | t8150    |                         4.00 | 0x348000000 | :white_check_mark: | :white_check_mark: |
+| M5 Pro  | t6050    |                         4.00 | 0x2c8d00000 | :white_check_mark: | :white_check_mark: |
 
 ### Credits
 

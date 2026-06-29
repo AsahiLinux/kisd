@@ -242,7 +242,7 @@ impl DebugUsb {
             base &= !0x1000000;
         }
 
-        for off in [0x0, 0x400000, 0x700000] {
+        for off in [0x0, 0x400000, 0x700000, 0xd00000] {
             self.base = base + off;
             log::info!("Trying base = 0x{:x}", self.base);
             if self.uart_tx_free(0).await.is_ok() {
