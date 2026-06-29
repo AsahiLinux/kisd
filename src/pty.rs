@@ -9,7 +9,6 @@ use std::task::ready;
 use nix::fcntl::{OFlag, open};
 use nix::pty::{PtyMaster, grantpt, posix_openpt, ptsname, unlockpt};
 use nix::sys::stat::Mode;
-use nix::sys::termios::{SetArg, cfmakeraw, tcgetattr, tcsetattr};
 use tokio::io::unix::AsyncFd;
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 
@@ -29,9 +28,14 @@ impl Pty {
         unlockpt(&fd)?;
 
         // Set raw mode on the server side
-        let mut termios = tcgetattr(&fd)?;
-        cfmakeraw(&mut termios);
-        tcsetattr(&fd, SetArg::TCSANOW, &termios)?;
+        #[cfg(target_os = "linux")]
+        {
+            use nix::sys::termios::{SetArg, cfmakeraw, tcgetattr, tcsetattr};
+
+            let mut termios = tcgetattr(&fd)?;
+            cfmakeraw(&mut termios);
+            tcsetattr(&fd, SetArg::TCSANOW, &termios)?;
+        }
 
         // Get the pty path
         let pty_name = unsafe { ptsname(&fd) }?;
