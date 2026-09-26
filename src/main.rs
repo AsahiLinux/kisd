@@ -103,8 +103,9 @@ impl KisPortal {
             // bcdDevice 2.00: M2
             // bcdDevice 3.00: M2 Pro
             // bcdDevice 4.00: M3, M3 Max, M4, M4 Pro, A18 Pro
-            (0x200 | 0x300 | 0x400, KisPortal::Pam) => Some(3),
-            (0x200 | 0x300 | 0x400, KisPortal::Ppm) => Some(4),
+            // bcdDevice 5.00: M6
+            (0x200 | 0x300 | 0x400 | 0x500, KisPortal::Pam) => Some(3),
+            (0x200 | 0x300 | 0x400 | 0x500, KisPortal::Ppm) => Some(4),
             _ => None,
         }
     }
